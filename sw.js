@@ -5,8 +5,8 @@
  * Cross-origin requests (your Apps Script / Google Sheets calls) are left
  * untouched — your data sync is handled separately by the app's own queue.
  */
-const CACHE = 'cfl-shell-v1';
-const SHELL = ['./', './index.html', './sw.js'];
+const CACHE = 'cfl-shell-v5';
+const SHELL = ['./', './index.html', './sw.js', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)));
