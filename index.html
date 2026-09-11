@@ -419,7 +419,7 @@
   function cfgVal(id){return document.getElementById(id).value.trim();}
   function saveSettings(){localStorage.setItem('cfg_name',cfgVal('cfgName'));localStorage.setItem('cfg_url',cfgVal('cfgUrl'));localStorage.setItem('cfg_secret',cfgVal('cfgSecret'));applyDefaults();loadAll();}
   function applyDefaults(){document.getElementById('txPaidBy').value=cfg().name||'Self';document.getElementById('setupNote').style.display=cfg().url?'none':'block';}
-  function saveStartBalances(){accounts().forEach(a=>{const el=document.getElementById('start_'+a.name);if(el)setStart(a.name,el.value);});renderBalances();alert('Balances saved.');}
+  function saveStartBalances(){document.querySelectorAll('#startInputs .startbal').forEach(el=>setStart(el.dataset.acct,el.value));renderBalances();alert('Balances saved.');}
 
   /* network */
   async function apiGet(sheet){const {url,secret}=cfg();const full=url+(url.includes('?')?'&':'?')+'sheet='+sheet+'&token='+encodeURIComponent(secret);const res=await fetch(full);return res.json();}
@@ -455,6 +455,7 @@
   function go(page){location.hash=page;}
   function route(){const page=(location.hash||'#log').slice(1);document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));(document.getElementById('page-'+page)||document.getElementById('page-log')).classList.add('active');document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('active',a.dataset.page===page));renderCurrent();window.scrollTo(0,0);}
   window.addEventListener('hashchange',route);
+  document.getElementById('nav').addEventListener('click',function(e){var a=e.target.closest('a[data-page]');if(a){e.preventDefault();go(a.dataset.page);}});
   function renderCurrent(){
     const page=(location.hash||'#log').slice(1);
     if(page==='log'){renderBalances();renderChips();}
@@ -472,6 +473,8 @@
   function toggleDrawer(id){document.getElementById(id).classList.toggle('expanded');}
   function setYesterday(){const y=new Date();y.setDate(y.getDate()-1);document.getElementById('txDate').value=iso(y);}
   function iso(d){return d.toISOString().split('T')[0];}
+  function uid(){return 'local_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
+  function defExpenseAcct(){const c=creditAccts();return (c[0]||accounts()[0]||{name:''}).name;}
   function money(n){return '$'+(Math.round(n*100)/100).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
   function money0(n){return '$'+Math.round(n).toLocaleString('en-US');}
   function prettyCat(c){c=(c||'').toLowerCase();if(c==='miscellaneous')return'Misc';return c.replace(/\b\w/g,m=>m.toUpperCase());}
@@ -509,13 +512,14 @@
   }
   function openEntry(){const d=document.getElementById('entryDrawer');if(!d.classList.contains('expanded'))d.classList.add('expanded');}
   function useTemplate(i){const t=templates()[i];resetEdit();openEntry();
-    document.getElementById('txName').value=t.label;fillAcctSelect(document.getElementById('txAccount'),t.account);
+    document.getElementById('txName').value=t.label;
     document.getElementById('txCategory').value=t.category;onCategoryChange();
+    fillAcctSelect(document.getElementById('txAccount'),t.account);
     if(t.flow==='transfer')fillAcctSelect(document.getElementById('txToAccount'),t.toAccount||CARD);
     document.getElementById('txTotal').value=t.amount||'';document.getElementById('txTotal').focus();setFlowHint(t.flow);}
   function useMerchant(name){const prev=allTx().find(it=>(it.name||'').toLowerCase()===name.toLowerCase());resetEdit();openEntry();
     document.getElementById('txName').value=name;
-    if(prev){document.getElementById('txCategory').value=prev.category||'grocery';fillAcctSelect(document.getElementById('txAccount'),prev.account||CARD);onCategoryChange();document.getElementById('txTotal').value=prev.total||'';}
+    if(prev){document.getElementById('txCategory').value=prev.category||'grocery';onCategoryChange();fillAcctSelect(document.getElementById('txAccount'),prev.account||CARD);document.getElementById('txTotal').value=prev.total||'';}
     document.getElementById('txTotal').focus();}
 
   /* manual form */
@@ -532,7 +536,7 @@
   function resetEdit(){editingId=null;document.getElementById('txSubmitBtn').innerText='Log Transaction';document.getElementById('entryTitle').innerText='Log manually';}
   function editTx(id){const it=allTx().find(x=>x.id===id);if(!it)return;resetEdit();editingId=id;openEntry();
     document.getElementById('txName').value=it.name;document.getElementById('txDate').value=it.date;
-    document.getElementById('txCategory').value=it.category;fillAcctSelect(document.getElementById('txAccount'),it.account);onCategoryChange();
+    document.getElementById('txCategory').value=it.category;onCategoryChange();fillAcctSelect(document.getElementById('txAccount'),it.account);
     if((it.flow||flowOf(it.category))==='transfer')fillAcctSelect(document.getElementById('txToAccount'),it.toAccount||CARD);
     document.getElementById('txTotal').value=it.total;document.getElementById('txTrip').value=it.trip||'';
     document.getElementById('txComments').value=(it.comments||'').replace(/\[R\]\s*/i,'');
@@ -558,14 +562,14 @@
       resetEdit();resetForm();renderCurrent();return;
     }
 
-    base.id='local_'+Date.now();
+    base.id=uid();
     resetForm();
     const q=getQueue();q.unshift(base);saveQueue(q);
     if(!offline&&cfg().url)trySync(base);
     if(cat==='grocery'){itemizeTarget={txId:base.id,store:base.name,date:base.date,total:Number(base.total)||0};go('groceries');}
     else renderCurrent();
   }
-  function resetForm(){document.getElementById('txForm').reset();document.getElementById('txDate').value=iso(new Date());applyDefaults();fillAcctSelect(document.getElementById('txAccount'));onCategoryChange();toggleDrawer('entryDrawer');resetEdit();}
+  function resetForm(){document.getElementById('txForm').reset();document.getElementById('txDate').value=iso(new Date());applyDefaults();fillAcctSelect(document.getElementById('txAccount'));onCategoryChange();document.getElementById('txAccount').value=defExpenseAcct();toggleDrawer('entryDrawer');resetEdit();}
 
   /* transactions */
   function toggleSort(){sortDir=sortDir==='desc'?'asc':'desc';document.getElementById('txSortBtn').innerText=sortDir==='desc'?'Newest ↓':'Oldest ↑';renderTransactions();}
@@ -623,7 +627,7 @@
     if(!itemizeTarget)return;
     const item=document.getElementById('giItem').value.trim();const amount=parseFloat(document.getElementById('giAmount').value)||0;
     if(!item||!amount)return;
-    const g={_sheet:'groceries',id:'local_'+Date.now(),txId:itemizeTarget.txId,date:itemizeTarget.date,store:itemizeTarget.store,item:item,amount:amount,isPending:true};
+    const g={_sheet:'groceries',id:uid(),txId:itemizeTarget.txId,date:itemizeTarget.date,store:itemizeTarget.store,item:item,amount:amount,isPending:true};
     const q=getQueue();q.unshift(g);saveQueue(q);
     document.getElementById('giItem').value='';document.getElementById('giAmount').value='';document.getElementById('giItem').focus();
     renderItemize();renderGroceryBrowse();
@@ -652,7 +656,7 @@
   function splitShared(mode){const total=parseFloat(document.getElementById('shTotal').value)||0;let yours=0;if(mode==='half')yours=total/2;else if(mode==='third')yours=total/3;else if(mode==='twothird')yours=total*2/3;else if(mode==='all')yours=total;document.getElementById('shYourShare').value=yours?yours.toFixed(2):'';recomputeShared();}
   function recomputeShared(){const total=parseFloat(document.getElementById('shTotal').value)||0;let yours=Math.min(parseFloat(document.getElementById('shYourShare').value)||0,total);const theirs=Math.max(0,total-yours);const payer=document.getElementById('shPayer').value;document.getElementById('sharedHint').innerText=payer==='me'?`You paid. Friend owes you ${money(theirs)}.`:`Friend paid. You owe ${money(yours)}.`;}
   function submitShared(e){e.preventDefault();const total=parseFloat(document.getElementById('shTotal').value)||0;const yours=Math.min(parseFloat(document.getElementById('shYourShare').value)||0,total);
-    const item={_sheet:'shared',id:'local_'+Date.now(),name:document.getElementById('shName').value,date:document.getElementById('shDate').value,category:document.getElementById('shCategory').value,total:total,payer:document.getElementById('shPayer').value,yourShare:yours,theirShare:Math.max(0,total-yours),settled:'no',comments:document.getElementById('shComments').value,isPending:true};
+    const item={_sheet:'shared',id:uid(),name:document.getElementById('shName').value,date:document.getElementById('shDate').value,category:document.getElementById('shCategory').value,total:total,payer:document.getElementById('shPayer').value,yourShare:yours,theirShare:Math.max(0,total-yours),settled:'no',comments:document.getElementById('shComments').value,isPending:true};
     document.getElementById('sharedForm').reset();document.getElementById('shDate').value=iso(new Date());document.getElementById('sharedHint').innerText='';toggleDrawer('sharedDrawer');
     const q=getQueue();q.unshift(item);saveQueue(q);renderShared();if(!offline&&cfg().url)trySync(item);}
   function allShared(){const seen=new Set();const out=[];[...queuedFor('shared'),...store.shared].forEach(it=>{if(!it||!it.name)return;const k=it.id||it.name+it.date;if(seen.has(k))return;seen.add(k);out.push(it);});return out;}
@@ -714,7 +718,7 @@
     legend.innerHTML=rows.map(r=>`<div class="lg-row"><span class="lg-dot" style="background:${r.color}"></span><span class="lg-cat">${prettyCat(r.cat)}</span><span class="lg-amt">${money(r.val)}</span><span class="lg-pct">${Math.round(r.f*100)}%</span></div>`).join('');}
 
   /* loans */
-  function submitLoan(e){e.preventDefault();const item={_sheet:'loans',id:'local_'+Date.now(),lender:document.getElementById('lnLender').value,principal:document.getElementById('lnPrincipal').value,rate:document.getElementById('lnRate').value||0,startDate:document.getElementById('lnStart').value,notes:document.getElementById('lnNotes').value,isPending:true};
+  function submitLoan(e){e.preventDefault();const item={_sheet:'loans',id:uid(),lender:document.getElementById('lnLender').value,principal:document.getElementById('lnPrincipal').value,rate:document.getElementById('lnRate').value||0,startDate:document.getElementById('lnStart').value,notes:document.getElementById('lnNotes').value,isPending:true};
     document.getElementById('loanForm').reset();toggleDrawer('loanDrawer');const q=getQueue();q.unshift(item);saveQueue(q);renderLoans();if(!offline&&cfg().url)trySync(item);}
   function allLoans(){const seen=new Set();const out=[];[...queuedFor('loans'),...store.loans].forEach(it=>{if(!it||!it.lender)return;const k=it.id||it.lender+it.principal;if(seen.has(k))return;seen.add(k);out.push(it);});return out;}
   function renderLoans(){const list=document.getElementById('loanList');list.innerHTML='';let total=0;
@@ -738,7 +742,7 @@
   function exportCSV(){if(!lastVisible.length){alert('Nothing to export in this view.');return;}const headers=['Date','Name','Category','Flow','Account','ToAccount','Total','Trip','Comments'];const esc=v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`;const lines=lastVisible.map(it=>[it.date,it.name,it.category,it.flow||flowOf(it.category),it.account||'',it.toAccount||'',(Number(it.total)||0).toFixed(2),it.trip||'',(it.comments||'').replace(/\[R\]\s*/i,'')].map(esc).join(','));const blob=new Blob(['\uFEFF'+headers.join(',')+'\r\n'+lines.join('\r\n')],{type:'text/csv;charset=utf-8;'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`cashflow-${iso(new Date())}.csv`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 
   /* settings managers */
-  function renderStartInputs(){document.getElementById('startInputs').innerHTML=accounts().map(a=>`<div class="form-group"><label>${a.name} — ${a.type==='credit'?'owed now':'balance now'}</label><input type="number" step="0.01" id="start_${a.name}" value="${startFor(a.name)||''}" placeholder="0.00"></div>`).join('');}
+  function renderStartInputs(){document.getElementById('startInputs').innerHTML=accounts().map(a=>`<div class="form-group"><label>${a.name} — ${a.type==='credit'?'owed now':'balance now'}</label><input type="number" step="0.01" class="startbal" data-acct="${a.name.replace(/"/g,'&quot;')}" value="${startFor(a.name)||''}" placeholder="0.00"></div>`).join('');}
   function renderAccountManager(){document.getElementById('acctList').innerHTML=accounts().map((a,i)=>`<div class="mrow"><span class="nm">${a.name} <small style="color:var(--text-dim)">${a.type}</small></span><button class="icon-btn del" data-i="${i}">✕</button></div>`).join('');
     document.getElementById('acctList').querySelectorAll('.del').forEach(b=>b.onclick=()=>removeAccount(+b.dataset.i));}
   function addAccount(){const name=document.getElementById('naName').value.trim();if(!name)return;const type=document.getElementById('naType').value;const a=accounts();if(a.some(x=>x.name===name)){alert('Account exists.');return;}a.push({name,type});saveAccounts(a);document.getElementById('naName').value='';refreshAcctUI();}
@@ -761,7 +765,7 @@
     fillAcctSelect(document.getElementById('ntAccount'));
     document.getElementById('txDate').value=iso(new Date());document.getElementById('shDate').value=iso(new Date());
     document.getElementById('cfgName').value=cfg().name;document.getElementById('cfgUrl').value=cfg().url;document.getElementById('cfgSecret').value=cfg().secret;
-    applyDefaults();onCategoryChange();
+    applyDefaults();onCategoryChange();document.getElementById('txAccount').value=defExpenseAcct();
     if(!cfg().url)go('settings');else if(!location.hash)go('log');
     route();
     if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
